@@ -55,6 +55,7 @@
     <Compile Include="BuildOneFile.cs" />
     <Compile Include="BuildOneFilePackage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="VsSolutionEvents.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Key.snk" />

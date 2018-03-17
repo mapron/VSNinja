@@ -38,6 +38,7 @@ namespace VSNinja
     [PackageRegistration(UseManagedResourcesOnly = true)]
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
     [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideAutoLoad(UIContextGuids80.NotBuildingAndNotDebugging)]
     [Guid(BuildOneFilePackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
     public sealed class BuildOneFilePackage : Package
@@ -46,6 +47,7 @@ namespace VSNinja
         /// BuildOneFilePackage GUID string.
         /// </summary>
         public const string PackageGuidString = "373e919b-80a7-424f-910a-e0c96c694bc0";
+        private VSSolutionEvents _events = new VSSolutionEvents();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BuildOneFile"/> class.
@@ -68,7 +70,19 @@ namespace VSNinja
         {
             BuildOneFile.Initialize(this);
             base.Initialize();
+
+            var solution = GetService(typeof(SVsSolution)) as IVsSolution;
+            if (null != solution)
+            {
+                _events.Advise(solution);
+            }
         }
+
+        //protected override void Dispose(bool disposing)
+        //{
+        //    base.Dispose(disposing);
+        //    _events.Unadvise();
+        //}
 
         #endregion
     }
