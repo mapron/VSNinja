@@ -82,9 +82,9 @@ public class VSSolutionEvents : IVsSolutionEvents, IVsSolutionLoadEvents
                 WorkingDirectory = solutionDirectory,
                 FileName = "cmd.exe",
                 CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
             };
-
-
+            
             process.Start();
             process.WaitForExit();
         }
