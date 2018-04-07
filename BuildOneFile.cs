@@ -125,8 +125,9 @@ namespace VSNinja
             //if (command == null)
             //    return; // @todo: more commands
             var Dte = this.ServiceProvider.GetService(typeof(DTE)) as DTE;           
-            var selPro = GetSelectedProject(Dte);
+          
             var selectedFiles = GetSelectedFiles(Dte);
+            var selPro = GetSelectedProject(Dte, selectedFiles[0]);
             RunNinja(selectedFiles[0], selPro);
         }
 
@@ -178,35 +179,34 @@ namespace VSNinja
             return false;
         }
 
-        public static Project GetSelectedProject(DTE dteObject)
+        public static Project GetSelectedProject(DTE dteObject, VCFile vcFile)
         {
             if (dteObject == null)
                 return null;
-            Array prjs = null;
+            Projects prjs = null;
             try
             {
-                prjs = (Array)dteObject.ActiveSolutionProjects;
+                prjs = dteObject.Solution.Projects;
             }
             catch
             {
-                // When VS2010 is started from the command line,
-                // we may catch a "Unspecified error" here.
             }
-            if (prjs == null || prjs.Length < 1)
+            if (prjs == null || prjs.Count < 1)
                 return null;
 
-            // don't handle multiple selection... use the first one
-            if (prjs.GetValue(0) is Project)
-                return (Project)prjs.GetValue(0);
+            foreach (Project proj in prjs)
+            {
+                var vcProject = (proj.Object as VCProject);
+                if (vcProject == (vcFile.project as VCProject))
+                    return proj;
+            }
+
             return null;
         }
 
 
         public static VCFile[] GetSelectedFiles(DTE dteObject)
         {
-            if (GetSelectedProject(dteObject) == null)
-                return null;
-
             if (dteObject.SelectedItems.Count <= 0)
                 return null;
 
