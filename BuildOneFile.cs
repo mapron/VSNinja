@@ -48,6 +48,10 @@ namespace VSNinja
 
         private static ErrorListProvider errorListProvider;
 
+        private EnvDTE.Project currentBuildingPro = null;
+        private VCNMakeTool currentNmakeTool = null;
+        private string originalNmakeCommand;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="BuildOneFile"/> class.
         /// Adds our command handlers for menu (commands must exist in the command table file)
@@ -124,16 +128,16 @@ namespace VSNinja
             //var command = sender as OleMenuCommand;
             //if (command == null)
             //    return; // @todo: more commands
-            var Dte = this.ServiceProvider.GetService(typeof(DTE)) as DTE;           
+            var Dte = this.ServiceProvider.GetService(typeof(DTE)) as DTE;
           
             var selectedFiles = GetSelectedFiles(Dte);
             var selPro = GetSelectedProject(Dte, selectedFiles[0]);
             RunNinja(selectedFiles[0], selPro);
         }
 
-        public static bool RunNinja(VCFile vcFile, EnvDTE.Project pro)
+        public bool RunNinja(VCFile vcFile, EnvDTE.Project pro)
         {
-            if (vcFile == null || pro == null)
+            if (vcFile == null || pro == null || currentBuildingPro != null)
                 return false;
                        
             PaneMessage(pro.DTE, "--- (ninja) file: " + vcFile.FullPath);
@@ -159,19 +163,21 @@ namespace VSNinja
                 var nmakeTool = tool as VCNMakeTool;
                 if (nmakeTool != null)
                 {
-                    string originalLine = nmakeTool.BuildCommandLine;
-                    string ninjaBin = originalLine.Split(' ')[0];
+                    currentNmakeTool = nmakeTool;
+                    originalNmakeCommand = nmakeTool.BuildCommandLine;
+                    string ninjaBin = originalNmakeCommand.Split(' ')[0];
                     nmakeTool.BuildCommandLine = ninjaBin + " " + objnameFull;
                     try
                     {
-                        pro.DTE.Solution.SolutionBuild.BuildProject(activeConfigName, pnameFull, true);
+                        currentBuildingPro = pro;
+                        pro.DTE.Events.BuildEvents.OnBuildDone += BuildEvents_OnBuildDone;
+                        pro.DTE.Solution.SolutionBuild.BuildProject(activeConfigName, pnameFull, false);                       
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show(ex.Message);
                     }
-                    nmakeTool.BuildCommandLine = originalLine;
-                    pro.Save();
+                          
                     return true;
                 }
             }
@@ -179,18 +185,72 @@ namespace VSNinja
             return false;
         }
 
+        private void BuildEvents_OnBuildDone(vsBuildScope Scope, vsBuildAction Action)
+        {
+            currentNmakeTool.BuildCommandLine = originalNmakeCommand;
+            currentNmakeTool = null;
+            currentBuildingPro.DTE.Events.BuildEvents.OnBuildDone -= BuildEvents_OnBuildDone;
+            currentBuildingPro.Save();
+            currentBuildingPro = null;           
+        }
+
+        public static List<Project> GetProjects(DTE dte)
+        {
+            Projects projects = dte.Solution.Projects;
+            List<Project> list = new List<Project>();
+            var item = projects.GetEnumerator();
+            while (item.MoveNext())
+            {
+                var project = item.Current as Project;
+                if (project == null)
+                {
+                    continue;
+                }
+
+                if (project.Kind == EnvDTE.Constants.vsProjectKindSolutionItems)
+                {
+                    list.AddRange(GetSolutionFolderProjects(project));
+                }
+                else
+                {
+                    list.Add(project);
+                }
+            }
+
+            return list;
+        }
+
+        private static IEnumerable<Project> GetSolutionFolderProjects(Project solutionFolder)
+        {
+            List<Project> list = new List<Project>();
+            for (var i = 1; i <= solutionFolder.ProjectItems.Count; i++)
+            {
+                var subProject = solutionFolder.ProjectItems.Item(i).SubProject;
+                if (subProject == null)
+                {
+                    continue;
+                }
+
+                // If this is another solution folder, do a recursive call, otherwise add
+                if (subProject.Kind == EnvDTE.Constants.vsProjectKindSolutionItems)
+                {
+                    list.AddRange(GetSolutionFolderProjects(subProject));
+                }
+                else 
+                {
+                    list.Add(subProject);
+                }
+            }
+
+            return list;
+        }
+
         public static Project GetSelectedProject(DTE dteObject, VCFile vcFile)
         {
             if (dteObject == null)
                 return null;
-            Projects prjs = null;
-            try
-            {
-                prjs = dteObject.Solution.Projects;
-            }
-            catch
-            {
-            }
+            List<Project> prjs = GetProjects(dteObject);
+           // MessageBox.Show("prjs:" + prjs.Count);
             if (prjs == null || prjs.Count < 1)
                 return null;
 
@@ -198,7 +258,10 @@ namespace VSNinja
             {
                 var vcProject = (proj.Object as VCProject);
                 if (vcProject == (vcFile.project as VCProject))
+                {
+                    //MessageBox.Show("prj found!");
                     return proj;
+                }
             }
 
             return null;
